@@ -71,6 +71,7 @@ st.markdown("""
 # ==========================================
 # 2. Mock Data Injection (Hardcoded)
 # ==========================================
+# Note: 'FullName' column is missing in CSV, we will generate it using a mapping dictionary.
 RAW_CSV_DATA = """Date,Year,Month,Region,Region_Code,Country,NSC,Framework,Framework_Score,Monthly_Total_Budget,Allocated_Cost
 1/1/24,2024,1,North America,NA,USA,HMA,Performance & Coverage,74.5,10684046.22,922226.75
 1/1/24,2024,1,North America,NA,USA,HMA,Quality Excellence,73.6,10684046.22,8980885.84
@@ -1024,14 +1025,14 @@ RAW_CSV_DATA = """Date,Year,Month,Region,Region_Code,Country,NSC,Framework,Frame
 8/1/25,2025,8,Asia Pacific,APAC,Indonesia,HMID,Quality Excellence,60.8,309517.33,202.16
 8/1/25,2025,8,Asia Pacific,APAC,Indonesia,HMID,Data Infrastructure,56.9,309517.33,108169.71
 8/1/25,2025,8,Asia Pacific,APAC,Indonesia,HMID,AI Adoption,62.8,309517.33,150827.7
-8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,Performance & Coverage,69,1035581.2,8370.1
-8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,Quality Excellence,67.5,1035581.2,163243.48
-8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,Data Infrastructure,67.2,1035581.2,92752.58
-8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,AI Adoption,73.4,1035581.2,771215.04
-8/1/25,2025,8,Central & South America,CS,Brazil,HMB,Performance & Coverage,69.2,952813.24,346964.26
-8/1/25,2025,8,Central & South America,CS,Brazil,HMB,Quality Excellence,65.2,952813.24,334097.32
-8/1/25,2025,8,Central & South America,CS,Brazil,HMB,Data Infrastructure,71,952813.24,172265.5
-8/1/25,2025,8,Central & South America,CS,Brazil,HMB,AI Adoption,65.8,952813.24,99486.16
+8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,Performance & Coverage,63.3,875846.05,110463.04
+8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,Quality Excellence,65.8,875846.05,207474.15
+8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,Data Infrastructure,64,875846.05,209260.31
+8/1/25,2025,8,Asia Pacific,APAC,India,HMIL,AI Adoption,66.1,875846.05,348648.56
+8/1/25,2025,8,Central & South America,CS,Brazil,HMB,Performance & Coverage,63.6,798853.37,549681.62
+8/1/25,2025,8,Central & South America,CS,Brazil,HMB,Quality Excellence,60.9,798853.37,76528.58
+8/1/25,2025,8,Central & South America,CS,Brazil,HMB,Data Infrastructure,69.4,798853.37,101428.12
+8/1/25,2025,8,Central & South America,CS,Brazil,HMB,AI Adoption,66.9,798853.37,71215.06
 9/1/25,2025,9,North America,NA,USA,HMA,Performance & Coverage,79.1,6460813.27,100265.74
 9/1/25,2025,9,North America,NA,USA,HMA,Quality Excellence,86,6460813.27,235967.42
 9/1/25,2025,9,North America,NA,USA,HMA,Data Infrastructure,83.3,6460813.27,5207716.28
@@ -1127,7 +1128,22 @@ RAW_CSV_DATA = """Date,Year,Month,Region,Region_Code,Country,NSC,Framework,Frame
 10/1/25,2025,10,Central & South America,CS,Brazil,HMB,Performance & Coverage,67.1,850368.82,271700.76
 10/1/25,2025,10,Central & South America,CS,Brazil,HMB,Quality Excellence,73.4,850368.82,53930.59
 10/1/25,2025,10,Central & South America,CS,Brazil,HMB,Data Infrastructure,66.7,850368.82,379650.96
-10/1/25,2025,10,Central & South America,CS,Brazil,HMB,AI Adoption,74.4,850368.82,145086.51"""
+10/1/25,2025,10,Central & South America,CS,Brazil,HMB,AI Adoption,74.4,850368.82,145086.51`;
+
+NSC_TO_NAME = {
+    'HMA': 'Hyundai Motor America',
+    'HAC': 'Hyundai Auto Canada',
+    'HMM': 'Hyundai Motor Mexico',
+    'HMD': 'Hyundai Motor Deutschland',
+    'HMUK': 'Hyundai Motor UK',
+    'HMF': 'Hyundai Motor France',
+    'HMS': 'Hyundai Motor Spain',
+    'HMI': 'Hyundai Motor Italy',
+    'HMCA': 'Hyundai Motor Company Australia',
+    'HMID': 'Hyundai Motor Indonesia',
+    'HMIL': 'Hyundai Motor India Ltd',
+    'HMB': 'Hyundai Motor Brasil'
+}
 
 COORDINATES = {
   'HMA': {'lat': 37.0902, 'lng': -95.7129}, # USA
@@ -1152,6 +1168,9 @@ def load_and_process_data():
     # Read CSV from string
     df = pd.read_csv(io.StringIO(RAW_CSV_DATA))
     
+    # Create FullName using mapping since it's missing in CSV
+    df['FullName'] = df['NSC'].map(NSC_TO_NAME)
+    
     # Standardize Month Names for display
     df['Month_Name'] = df['Month'].apply(lambda x: datetime.date(1900, x, 1).strftime('%b'))
     df['Quarter'] = df['Month'].apply(lambda x: (x - 1) // 3 + 1)
@@ -1175,15 +1194,8 @@ def get_aggregated_data(df, year, quarter, month, region_filter):
     if filtered.empty:
         return None, None
 
-    # Group by NSC (Region Code) to get averages across filtered timeframe
-    # We average the scores, but sum the budget? 
-    # Note: Budget is likely per month. If viewing a quarter, we might want sum.
-    # For simplicity in this dashboard view which mimics a snapshot, let's take mean of scores and sum of budget.
-    
     # Pivot Framework scores first
-    # The data is in long format: one row per framework. 
-    # We need wide format: columns for Performance, Quality, etc.
-    
+    # Now 'FullName' exists in df, so we can use it in index
     pivot_df = filtered.pivot_table(
         index=['NSC', 'FullName', 'Region', 'Country', 'Year', 'Month'], 
         columns='Framework', 
@@ -1218,10 +1230,8 @@ def get_aggregated_data(df, year, quarter, month, region_filter):
         'worst_performer': final_agg.loc[final_agg['Overall_Score'].idxmin()]
     }
     
-    # Calculate MoM Change (approximate using previous period if available, or just 0 for simplicity in this static demo)
-    # In a real app with full history, we'd calculate this dynamically. 
-    # Here we will simulate or set to 0 if not straightforward.
-    global_stats['mom_change'] = 2.5 # Placeholder trend
+    # Calculate MoM Change (Placeholder)
+    global_stats['mom_change'] = 2.5 
     
     return final_agg, global_stats
 
@@ -1354,7 +1364,7 @@ with col_map:
     
     # Tooltip
     tooltip = {
-        "html": "<b>{FullName} ({NSC})</b><br>Score: <b>{Overall_Score}</b><br>Budget: ${Monthly_Total_Budget}",
+        "html": "<b>{FullName} ({NSC})</b><br>Score: <b>{Overall_Score:.1f}</b><br>Budget: ${Monthly_Total_Budget:,.0f}",
         "style": {"backgroundColor": "white", "color": "black"}
     }
 
