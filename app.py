@@ -21,12 +21,10 @@ st.set_page_config(
 # Custom CSS for Hyundai-style aesthetics
 st.markdown("""
     <style>
-        /* Main background and font */
         .stApp {
             background-color: #f8fafc;
             font-family: 'Inter', sans-serif;
         }
-        /* Metrics Cards */
         div[data-testid="stMetric"] {
             background-color: white;
             padding: 15px;
@@ -44,11 +42,9 @@ st.markdown("""
             color: #0f172a;
             font-weight: 700;
         }
-        /* Header styling */
         h1, h2, h3 {
-            color: #002c5f; /* Hyundai Blue */
+            color: #002c5f;
         }
-        /* Tabs */
         .stTabs [data-baseweb="tab-list"] {
             gap: 2px;
         }
@@ -69,9 +65,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. Mock Data Injection (Hardcoded)
+# 2. Mock Data Injection
 # ==========================================
-# Note: 'FullName' column is missing in CSV, we will generate it using a mapping dictionary.
+# CSV Data containing 2024-2025 data
 RAW_CSV_DATA = """Date,Year,Month,Region,Region_Code,Country,NSC,Framework,Framework_Score,Monthly_Total_Budget,Allocated_Cost
 1/1/24,2024,1,North America,NA,USA,HMA,Performance & Coverage,74.5,10684046.22,922226.75
 1/1/24,2024,1,North America,NA,USA,HMA,Quality Excellence,73.6,10684046.22,8980885.84
@@ -1128,7 +1124,7 @@ RAW_CSV_DATA = """Date,Year,Month,Region,Region_Code,Country,NSC,Framework,Frame
 10/1/25,2025,10,Central & South America,CS,Brazil,HMB,Performance & Coverage,67.1,850368.82,271700.76
 10/1/25,2025,10,Central & South America,CS,Brazil,HMB,Quality Excellence,73.4,850368.82,53930.59
 10/1/25,2025,10,Central & South America,CS,Brazil,HMB,Data Infrastructure,66.7,850368.82,379650.96
-10/1/25,2025,10,Central & South America,CS,Brazil,HMB,AI Adoption,74.4,850368.82,145086.51`;
+10/1/25,2025,10,Central & South America,CS,Brazil,HMB,AI Adoption,74.4,850368.82,145086.51"""
 
 NSC_TO_NAME = {
     'HMA': 'Hyundai Motor America',
@@ -1146,18 +1142,18 @@ NSC_TO_NAME = {
 }
 
 COORDINATES = {
-  'HMA': {'lat': 37.0902, 'lng': -95.7129}, # USA
-  'HAC': {'lat': 56.1304, 'lng': -106.3468}, # Canada
-  'HMM': {'lat': 23.6345, 'lng': -102.5528}, # Mexico
-  'HMD': {'lat': 51.1657, 'lng': 10.4515}, # Germany
-  'HMUK': {'lat': 55.3781, 'lng': -3.4360}, # UK
-  'HMF': {'lat': 46.2276, 'lng': 2.2137}, # France
-  'HMS': {'lat': 40.4637, 'lng': -3.7492}, # Spain
-  'HMI': {'lat': 41.8719, 'lng': 12.5674}, # Italy
-  'HMCA': {'lat': -25.2744, 'lng': 133.7751}, # Australia
-  'HMID': {'lat': -0.7893, 'lng': 113.9213}, # Indonesia
-  'HMIL': {'lat': 20.5937, 'lng': 78.9629}, # India
-  'HMB': {'lat': -14.2350, 'lng': -51.9253}, # Brazil
+  'HMA': {'lat': 37.0902, 'lng': -95.7129},
+  'HAC': {'lat': 56.1304, 'lng': -106.3468},
+  'HMM': {'lat': 23.6345, 'lng': -102.5528},
+  'HMD': {'lat': 51.1657, 'lng': 10.4515},
+  'HMUK': {'lat': 55.3781, 'lng': -3.4360},
+  'HMF': {'lat': 46.2276, 'lng': 2.2137},
+  'HMS': {'lat': 40.4637, 'lng': -3.7492},
+  'HMI': {'lat': 41.8719, 'lng': 12.5674},
+  'HMCA': {'lat': -25.2744, 'lng': 133.7751},
+  'HMID': {'lat': -0.7893, 'lng': 113.9213},
+  'HMIL': {'lat': 20.5937, 'lng': 78.9629},
+  'HMB': {'lat': -14.2350, 'lng': -51.9253},
 }
 
 # ==========================================
@@ -1165,24 +1161,23 @@ COORDINATES = {
 # ==========================================
 @st.cache_data
 def load_and_process_data():
-    # Read CSV from string
     df = pd.read_csv(io.StringIO(RAW_CSV_DATA))
     
-    # Create FullName using mapping since it's missing in CSV
+    # Add FullName column
     df['FullName'] = df['NSC'].map(NSC_TO_NAME)
     
-    # Standardize Month Names for display
+    # Month Name and Quarter
     df['Month_Name'] = df['Month'].apply(lambda x: datetime.date(1900, x, 1).strftime('%b'))
     df['Quarter'] = df['Month'].apply(lambda x: (x - 1) // 3 + 1)
     
-    # Normalize Region name
+    # Normalize Region
     df['Region'] = df['Region'].replace('Central & South America', 'LATAM')
     
     return df
 
 def get_aggregated_data(df, year, quarter, month, region_filter):
-    # Filter
     filtered = df[df['Year'] == year].copy()
+    
     if quarter != 'All':
         filtered = filtered[filtered['Quarter'] == int(quarter)]
     if month != 'All':
@@ -1194,25 +1189,24 @@ def get_aggregated_data(df, year, quarter, month, region_filter):
     if filtered.empty:
         return None, None
 
-    # Pivot Framework scores first
-    # Now 'FullName' exists in df, so we can use it in index
+    # Pivot Framework Scores
     pivot_df = filtered.pivot_table(
         index=['NSC', 'FullName', 'Region', 'Country', 'Year', 'Month'], 
         columns='Framework', 
         values='Framework_Score'
     ).reset_index()
     
-    # Merge back budget (Budget is repeated per framework row in raw data, so we take mean or max per month/nsc)
+    # Aggregate Budget
     budget_df = filtered.groupby(['NSC', 'Year', 'Month'])['Monthly_Total_Budget'].max().reset_index()
     pivot_df = pd.merge(pivot_df, budget_df, on=['NSC', 'Year', 'Month'])
     
-    # Now aggregate over time (if multiple months selected)
+    # Final Aggregation
     final_agg = pivot_df.groupby(['NSC', 'FullName', 'Region', 'Country']).agg({
         'Performance & Coverage': 'mean',
         'Quality Excellence': 'mean',
         'Data Infrastructure': 'mean',
         'AI Adoption': 'mean',
-        'Monthly_Total_Budget': 'sum' # Sum budget over the period
+        'Monthly_Total_Budget': 'sum'
     }).reset_index()
     
     # Calculate Overall Score
@@ -1222,29 +1216,23 @@ def get_aggregated_data(df, year, quarter, month, region_filter):
     final_agg['lat'] = final_agg['NSC'].map(lambda x: COORDINATES.get(x, {}).get('lat'))
     final_agg['lng'] = final_agg['NSC'].map(lambda x: COORDINATES.get(x, {}).get('lng'))
     
-    # Calculate Global Stats
+    # Global Stats
     global_stats = {
         'avg_score': final_agg['Overall_Score'].mean(),
         'total_budget': final_agg['Monthly_Total_Budget'].sum(),
         'top_performer': final_agg.loc[final_agg['Overall_Score'].idxmax()],
-        'worst_performer': final_agg.loc[final_agg['Overall_Score'].idxmin()]
+        'worst_performer': final_agg.loc[final_agg['Overall_Score'].idxmin()],
+        'mom_change': 2.5 # Placeholder
     }
-    
-    # Calculate MoM Change (Placeholder)
-    global_stats['mom_change'] = 2.5 
     
     return final_agg, global_stats
 
 def get_trend_data(df, region_filter):
-    # For Trend Chart: Group by Date (Year-Month)
     filtered = df.copy()
     if region_filter != 'All':
         filtered = filtered[filtered['Region'] == region_filter]
         
-    # Pivot to get average overall score per date
     daily = filtered.groupby(['Year', 'Month', 'NSC'])['Framework_Score'].mean().reset_index()
-    
-    # Global Average Trend
     trend = daily.groupby(['Year', 'Month'])['Framework_Score'].mean().reset_index()
     trend['Date'] = pd.to_datetime(trend[['Year', 'Month']].assign(DAY=1))
     
@@ -1259,7 +1247,6 @@ with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/4/44/Hyundai_Motor_Company_logo.svg", width=150)
     st.title("Dashboard Controls")
     
-    # API Key Input
     api_key = st.text_input("Google Gemini API Key", type="password", help="Enter key for AI Consultant features")
     if api_key:
         os.environ["GOOGLE_API_KEY"] = api_key
@@ -1267,16 +1254,13 @@ with st.sidebar:
 
     st.divider()
     
-    # Filters
     available_years = sorted(df_raw['Year'].unique(), reverse=True)
     year = st.selectbox("Year", available_years, index=0)
     
     quarter = st.selectbox("Quarter", ["All", "1", "2", "3", "4"], index=0)
     
-    # Filter months based on selection
     month_options = ["All"] + list(df_raw[df_raw['Year'] == year]['Month_Name'].unique())
     if quarter != "All":
-        # Simple quarter logic logic
         q_months = {
             "1": ["Jan", "Feb", "Mar"], "2": ["Apr", "May", "Jun"],
             "3": ["Jul", "Aug", "Sep"], "4": ["Oct", "Nov", "Dec"]
@@ -1297,52 +1281,31 @@ if current_data is None:
     st.error("No data available for the selected filters.")
     st.stop()
 
-# --- Row 1: KPI Cards ---
+# Row 1: KPI Cards
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(
-        label=f"{region if region != 'All' else 'Global'} Avg Score", 
-        value=f"{stats['avg_score']:.1f}", 
-        delta=f"{stats['mom_change']}%"
-    )
+    st.metric(f"{region if region != 'All' else 'Global'} Avg Score", f"{stats['avg_score']:.1f}", f"{stats['mom_change']}%")
 with col2:
-    st.metric(
-        label="Top Performer", 
-        value=stats['top_performer']['NSC'],
-        delta=f"Score: {stats['top_performer']['Overall_Score']:.1f}"
-    )
+    st.metric("Top Performer", stats['top_performer']['NSC'], f"Score: {stats['top_performer']['Overall_Score']:.1f}")
 with col3:
-    st.metric(
-        label="Needs Attention", 
-        value=stats['worst_performer']['NSC'],
-        delta=f"Score: {stats['worst_performer']['Overall_Score']:.1f}",
-        delta_color="inverse"
-    )
+    st.metric("Needs Attention", stats['worst_performer']['NSC'], f"Score: {stats['worst_performer']['Overall_Score']:.1f}", delta_color="inverse")
 with col4:
-    # Format budget
-    budget_formatted = f"${stats['total_budget']/1_000_000:.1f}M"
-    st.metric(
-        label="Total Media Budget", 
-        value=budget_formatted
-    )
+    st.metric("Total Media Budget", f"${stats['total_budget']/1_000_000:.1f}M")
 
-# --- Row 2: Map & AI Consultant ---
+# Row 2: Map & AI Consultant
 col_map, col_ai = st.columns([2, 1])
 
 with col_map:
     st.subheader("🌍 Global Status Map")
     
-    # Pydeck Map
-    # Color logic: Blue for high, Red for low
     def get_color(score):
-        if score >= 80: return [0, 44, 95, 200] # Hyundai Dark Blue
-        if score >= 60: return [59, 130, 246, 200] # Light Blue
-        if score >= 50: return [234, 179, 8, 200] # Yellow
-        return [239, 68, 68, 200] # Red
+        if score >= 80: return [0, 44, 95, 200]
+        if score >= 60: return [59, 130, 246, 200]
+        if score >= 50: return [234, 179, 8, 200]
+        return [239, 68, 68, 200]
 
     current_data['color'] = current_data['Overall_Score'].apply(get_color)
-    # Scale radius based on budget relative to max
     max_budget = current_data['Monthly_Total_Budget'].max()
     current_data['radius'] = (current_data['Monthly_Total_Budget'] / max_budget) * 500000 + 100000
 
@@ -1361,103 +1324,56 @@ with col_map:
     )
 
     view_state = pdk.ViewState(latitude=20, longitude=10, zoom=1.5, pitch=0)
-    
-    # Tooltip
-    tooltip = {
-        "html": "<b>{FullName} ({NSC})</b><br>Score: <b>{Overall_Score:.1f}</b><br>Budget: ${Monthly_Total_Budget:,.0f}",
-        "style": {"backgroundColor": "white", "color": "black"}
-    }
-
+    tooltip = {"html": "<b>{FullName} ({NSC})</b><br>Score: <b>{Overall_Score:.1f}</b><br>Budget: ${Monthly_Total_Budget:,.0f}"}
     r = pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip, map_style="light")
     st.pydeck_chart(r)
 
 with col_ai:
     st.subheader("✨ AI Strategy Consultant")
-    
     with st.container(border=True):
-        st.markdown("""
-        **Context-Aware Analysis**  
-        Analyzes current filters against yearly baselines.
-        """)
+        # Fixed multi-line markdown to avoid IndentationError
+        st.markdown(
+            "**Context-Aware Analysis**  \n"
+            "Analyzes current filters against yearly baselines."
+        )
         
         tab1, tab2, tab3 = st.tabs(["Exec Summary", "Gap Analysis", "Action Plan"])
         
-        # Helper to generate insights
         def get_gemini_response(prompt_type):
             if not api_key:
-                return "⚠️ Please enter a valid Google Gemini API Key in the sidebar to generate insights."
-            
+                return "⚠️ Please enter a valid Google Gemini API Key in the sidebar."
             try:
-                model = genai.GenerativeModel('gemini-2.5-flash') # Or gemini-pro
-                
-                # Construct Prompt
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 context_str = f"Period: {year} {month}, Region: {region}"
-                data_summary = current_data[['NSC', 'Overall_Score', 'Performance & Coverage', 'Quality Excellence', 'Data Infrastructure', 'AI Adoption']].to_string()
-                
-                full_prompt = f"""
-                You are a Senior Digital Strategy Consultant for Hyundai Global.
-                Context: {context_str}
-                Data: {data_summary}
-                
-                Task: Provide a concise {prompt_type} based on the data above.
-                - High Score > 80, Low < 60.
-                - Identify wins and critical gaps.
-                - Format as markdown with bullet points.
-                - Be brief and executive.
-                """
+                data_summary = current_data[['NSC', 'Overall_Score', 'Performance & Coverage', 'Quality Excellence']].to_string()
+                full_prompt = f"Role: Senior Digital Strategy Consultant. Context: {context_str}. Data: {data_summary}. Provide {prompt_type}."
                 
                 with st.spinner("Consulting AI..."):
                     response = model.generate_content(full_prompt)
                     return response.text
             except Exception as e:
-                return f"Error generating insight: {str(e)}"
+                return f"Error: {str(e)}"
 
         with tab1:
-            if st.button("Generate Summary", key="btn_exec"):
-                st.markdown(get_gemini_response("Executive Summary"))
-            else:
-                st.info("Click to generate an executive summary of current performance.")
-        
+            if st.button("Generate Summary", key="btn_exec"): st.markdown(get_gemini_response("Executive Summary"))
         with tab2:
-            if st.button("Analyze Gaps", key="btn_gap"):
-                st.markdown(get_gemini_response("Gap Analysis (Focus on Data & AI)"))
-            else:
-                st.info("Click to analyze gaps in Data Infrastructure and AI Adoption.")
-                
+            if st.button("Analyze Gaps", key="btn_gap"): st.markdown(get_gemini_response("Gap Analysis"))
         with tab3:
-            if st.button("Create Plan", key="btn_plan"):
-                st.markdown(get_gemini_response("Strategic Action Plan"))
-            else:
-                st.info("Click to generate tactical recommendations.")
+            if st.button("Create Plan", key="btn_plan"): st.markdown(get_gemini_response("Action Plan"))
 
-# --- Row 3: Heatmap & Gap Analysis ---
+# Row 3: Heatmap & Gap Analysis
 col_heat, col_gap = st.columns([2, 1])
 
 with col_heat:
     st.subheader("📊 Strategy Performance Heatmap")
-    
-    # Prepare display dataframe
-    display_df = current_data[['FullName', 'NSC', 'Monthly_Total_Budget', 'Performance & Coverage', 'Quality Excellence', 'Data Infrastructure', 'AI Adoption', 'Overall_Score']].copy()
-    display_df = display_df.sort_values('Overall_Score', ascending=False)
+    display_df = current_data[['FullName', 'NSC', 'Monthly_Total_Budget', 'Performance & Coverage', 'Quality Excellence', 'Data Infrastructure', 'AI Adoption', 'Overall_Score']].sort_values('Overall_Score', ascending=False)
     
     st.dataframe(
         display_df,
         column_config={
-            "Monthly_Total_Budget": st.column_config.ProgressColumn(
-                "Budget",
-                help="Monthly Media Spend",
-                format="$%f",
-                min_value=0,
-                max_value=max_budget,
-            ),
-            "Overall_Score": st.column_config.NumberColumn(
-                "Overall",
-                format="%.1f"
-            ),
+            "Monthly_Total_Budget": st.column_config.ProgressColumn("Budget", format="$%f", min_value=0, max_value=max_budget),
+            "Overall_Score": st.column_config.NumberColumn("Overall", format="%.1f"),
             "Performance & Coverage": st.column_config.NumberColumn("Perf", format="%.0f"),
-            "Quality Excellence": st.column_config.NumberColumn("Qual", format="%.0f"),
-            "Data Infrastructure": st.column_config.NumberColumn("Data", format="%.0f"),
-            "AI Adoption": st.column_config.NumberColumn("AI", format="%.0f"),
         },
         hide_index=True,
         use_container_width=True,
@@ -1466,8 +1382,6 @@ with col_heat:
 
 with col_gap:
     st.subheader("📉 Gap Analysis")
-    
-    # Compare each region's Overall Score to the Global Average
     gap_df = current_data[['NSC', 'Overall_Score']].copy()
     avg_score = stats['avg_score']
     gap_df['Gap'] = gap_df['Overall_Score'] - avg_score
@@ -1476,46 +1390,17 @@ with col_gap:
 
     fig_gap = go.Figure()
     fig_gap.add_trace(go.Bar(
-        y=gap_df['NSC'],
-        x=gap_df['Gap'],
-        orientation='h',
-        marker_color=gap_df['Color'],
-        text=gap_df['Gap'].apply(lambda x: f"{x:+.1f}"),
-        textposition='auto'
+        y=gap_df['NSC'], x=gap_df['Gap'], orientation='h', marker_color=gap_df['Color'], text=gap_df['Gap'].apply(lambda x: f"{x:+.1f}")
     ))
-    
-    fig_gap.update_layout(
-        title=f"Divergence from Avg ({avg_score:.1f})",
-        xaxis_title="Gap Score",
-        yaxis_title="Region",
-        height=400,
-        margin=dict(l=0, r=0, t=40, b=0),
-        plot_bgcolor='white',
-    )
+    fig_gap.update_layout(title=f"Divergence from Avg ({avg_score:.1f})", margin=dict(l=0, r=0, t=40, b=0), height=400)
     st.plotly_chart(fig_gap, use_container_width=True)
 
-# --- Row 4: Trend Chart ---
+# Row 4: Trend Chart
 st.subheader("📈 Maturity Progression (Trend)")
-
 trend_data = get_trend_data(df_raw, region)
-
-fig_trend = px.line(
-    trend_data, 
-    x='Date', 
-    y='Framework_Score', 
-    markers=True,
-    title=f"Average Maturity Trend - {region if region != 'All' else 'Global'}",
-    line_shape='spline'
-)
+fig_trend = px.line(trend_data, x='Date', y='Framework_Score', markers=True, line_shape='spline')
 fig_trend.update_traces(line_color='#002c5f', line_width=3)
-fig_trend.update_layout(
-    xaxis_title="",
-    yaxis_title="Score",
-    yaxis=dict(range=[40, 100]),
-    plot_bgcolor='white',
-    hovermode="x unified"
-)
+fig_trend.update_layout(yaxis=dict(range=[40, 100]), plot_bgcolor='white')
 fig_trend.update_xaxes(showgrid=False)
 fig_trend.update_yaxes(showgrid=True, gridcolor='#f1f5f9')
-
 st.plotly_chart(fig_trend, use_container_width=True)
